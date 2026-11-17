@@ -1,17 +1,20 @@
-// Boot and the one loop: input is read every frame, the world advances in fixed 1/60 s steps
-// (several in a slow frame, none in a fast one), and the renderer paints what is there. The game
-// moves between four screens: title, play, paused and game over.
+// Boot and the one loop for SALTWAKE. The canvas fills the window; the town advances in fixed
+// 1/60 s steps and is painted once a frame. Screens: the title (the town drifting behind it),
+// play, paused. The save is written whenever the job or the cash changes.
 //
-// ?seed=N fixes the falling pattern. ?shot=start|play|end (with &seed=N) stages that scene
-// instead of running the loop, paints it twice and sets window.__shotReady for a screenshot.
-import { BEST_KEY, LIVES, STEP } from './config.js';
-import { createRandom } from './random.js';
-import { createWorld, EVENT_HIT, EVENT_OVER } from './world.js';
-import { ACTION_CONFIRM, ACTION_PAUSE, createInput } from './input.js';
-import { createRenderer, SCREEN_OVER, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+// ?shot=chase|street|title|pier&seed=N stages that scene instead (no sound, no storage), paints
+// it twice and then sets window.__shotReady for the screenshot.
+import { paintGround } from './city.js';
+import { createAudio } from './audio.js';
+import { createGame, STEP, stepGame } from './game.js';
+import { createHudState, drawHud, paintMinimap } from './hud.js';
+import { createInput, idleControls } from './input.js';
+import { JOBS } from './jobs.js';
+import { createCamera, drawWorld, followCamera, screenToWorld } from './render.js';
+import { clearSave, loadSave, writeSave } from './save.js';
 import { stageShot } from './shots.js';
+import { drawTitle, titleCameraPoint } from './title.js';
 
-/** The longest frame the loop catches up on; a longer stall (a hidden tab) is dropped, not replayed. */
 const MAX_FRAME = 0.25;
 
 const params = new URLSearchParams(window.location.search);
@@ -21,30 +24,42 @@ const seed = Number.isInteger(seedParam) ? seedParam : Math.floor(Math.random() 
 
 const canvas = document.getElementById('game');
 const status = document.getElementById('status');
-const world = createWorld(createRandom(seed));
-const renderer = createRenderer(canvas);
+const ctx = canvas.getContext('2d');
+const dusk = document.createElement('canvas');
+const cam = createCamera();
 
-function readBest() {
-  try {
-    return Number.parseInt(window.localStorage.getItem(BEST_KEY) ?? '0', 10) || 0;
-  } catch {
-    return 0;
-  }
+function fitCanvas() {
+  const dpr = shot ? 1 : Math.min(2, window.devicePixelRatio || 1);
+  cam.w = window.innerWidth;
+  cam.h = window.innerHeight;
+  canvas.width = Math.round(cam.w * dpr);
+  canvas.height = Math.round(cam.h * dpr);
 }
 
-function saveBest(value) {
-  try {
-    window.localStorage.setItem(BEST_KEY, String(value));
-  } catch {
-    // Storage can be off (private windows): the best score then lasts this visit only.
-  }
+function prepareCity(state) {
+  state.city.ground ??= paintGround(state.city);
+  state.city.minimap ??= paintMinimap(state.city);
+}
+
+function placeTitleCamera(time) {
+  const point = titleCameraPoint(time);
+  cam.x = point.x;
+  cam.y = point.y;
+  cam.zoom = point.zoom;
 }
 
 function runShot(name) {
-  const scene = stageShot(name, world);
+  fitCanvas();
+  const scene = stageShot(name, seed);
+  prepareCity(scene.state);
+  const hud = createHudState();
+  if (scene.screen === 'title') placeTitleCamera(scene.state.time);
+  else followCamera(cam, scene.state, 0, true);
   let painted = 0;
   function paint() {
-    renderer.draw(world.state, scene.screen, scene.best);
+    drawWorld(ctx, dusk, cam, scene.state, scene.screen !== 'title');
+    if (scene.screen === 'title') drawTitle(ctx, cam.w, cam.h, scene.save, scene.state.time);
+    else drawHud(ctx, scene.state, cam, hud, 0, false);
     painted += 1;
     if (painted < 2) requestAnimationFrame(paint);
     else window.__shotReady = true;
@@ -53,80 +68,102 @@ function runShot(name) {
 }
 
 function runGame() {
+  fitCanvas();
+  window.addEventListener('resize', fitCanvas);
   const input = createInput(canvas);
-  let screen = SCREEN_TITLE;
-  let best = readBest();
+  const audio = createAudio();
+  let save = loadSave();
+  let state = createGame(seed, save);
+  prepareCity(state);
+  let screen = 'title';
+  let hud = createHudState();
   let accumulator = 0;
   let last = performance.now();
+  let pending = { enter: false, strike: false };
+  let saved = { job: save?.job ?? 0, cash: save?.cash ?? -1 };
+  window.__game = { get state() { return state; }, get screen() { return screen; } };
 
-  // Screen readers (and anyone watching the page's text) hear the screen changes and each hit.
+  const unlock = () => audio.unlock();
+  window.addEventListener('keydown', unlock);
+  window.addEventListener('pointerdown', unlock);
+
   function announce(message) {
     status.textContent = message;
   }
 
-  function startGame() {
-    world.reset();
-    accumulator = 0;
-    screen = SCREEN_PLAY;
-    announce(`Playing. ${LIVES} lives.`);
-  }
-
-  function endGame() {
-    screen = SCREEN_OVER;
-    if (world.state.score > best) {
-      best = world.state.score;
-      saveBest(best);
+  function begin(fresh) {
+    if (fresh) {
+      clearSave();
+      save = null;
     }
-    announce(`Game over. Score ${world.state.score}. Best ${best}.`);
+    state = createGame(seed + 1, fresh ? null : save);
+    hud = createHudState();
+    followCamera(cam, state, 0, true);
+    screen = 'play';
+    announce(`Job ${state.job.id}: ${JOBS[state.job.id].title}.`);
   }
 
-  function handleActions() {
-    const actions = input.takeActions();
-    if (actions & ACTION_CONFIRM && (screen === SCREEN_TITLE || screen === SCREEN_OVER)) startGame();
-    else if (actions & ACTION_PAUSE && screen === SCREEN_PLAY) {
-      screen = SCREEN_PAUSED;
-      announce('Paused.');
-    } else if (actions & (ACTION_PAUSE | ACTION_CONFIRM) && screen === SCREEN_PAUSED) {
-      screen = SCREEN_PLAY;
-      announce('Playing.');
+  function keepSave() {
+    if (state.job.id !== saved.job || state.cash !== saved.cash) {
+      writeSave(state.job.id, state.cash);
+      saved = { job: state.job.id, cash: state.cash };
     }
   }
 
-  function step() {
-    if (screen === SCREEN_TITLE) {
-      world.step(STEP, 0, true);
-      return;
+  function speak(events) {
+    for (const e of events) {
+      if (e === 'job') announce(`Job ${state.job.id}: ${JOBS[state.job.id].title}. ${JOBS[state.job.id].brief}`);
+      else if (e === 'wanted') announce(`Wanted level ${state.wanted.level}.`);
+      else if (e === 'blown') announce('Blown. The harbor watch is coming.');
+      else if (e === 'down') announce('Knocked out.');
     }
-    const events = world.step(STEP, input.direction(), false);
-    if (events & EVENT_OVER) endGame();
-    else if (events & EVENT_HIT) announce(world.state.lives === 1 ? 'Hit. 1 life left.' : `Hit. ${world.state.lives} lives left.`);
   }
 
   function frame(now) {
     requestAnimationFrame(frame);
-    accumulator += Math.min((now - last) / 1000, MAX_FRAME);
+    const elapsed = Math.min((now - last) / 1000, MAX_FRAME);
     last = now;
-    handleActions();
-    if (screen === SCREEN_TITLE || screen === SCREEN_PLAY) {
-      while (accumulator >= STEP && (screen === SCREEN_TITLE || screen === SCREEN_PLAY)) {
-        step();
+    const controls = screen === 'title' ? input.controls(() => null) : input.controls((sx, sy) => screenToWorld(cam, sx, sy));
+    if (controls.mute) audio.toggleMute();
+    if (screen === 'title') {
+      if (controls.fresh) begin(true);
+      else if (controls.confirm) begin(false);
+    } else if (controls.pause) {
+      screen = screen === 'paused' ? 'play' : 'paused';
+      announce(screen === 'paused' ? 'Paused.' : 'Playing.');
+    }
+    pending.enter ||= controls.enter;
+    pending.strike ||= controls.strike;
+    if (screen === 'paused') {
+      accumulator = 0;
+    } else {
+      accumulator += elapsed;
+      while (accumulator >= STEP) {
+        const stepControls = screen === 'play' ? { ...controls, ...pending } : idleControls();
+        pending = { enter: false, strike: false };
+        const events = stepGame(state, stepControls, STEP);
+        if (screen === 'play') {
+          audio.play(events);
+          speak(events);
+        }
         accumulator -= STEP;
       }
-    } else {
-      accumulator = 0;
     }
-    renderer.draw(world.state, screen, best);
+    if (screen === 'title') placeTitleCamera(state.time);
+    else {
+      followCamera(cam, state, elapsed, false);
+      keepSave();
+    }
+    audio.update(state, screen === 'play');
+    drawWorld(ctx, dusk, cam, state, screen !== 'title');
+    if (screen === 'title') drawTitle(ctx, cam.w, cam.h, save, state.time);
+    else drawHud(ctx, state, cam, hud, elapsed, screen === 'paused');
   }
 
-  // Leaving the tab pauses a running game rather than letting blocks fall unseen.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden && screen === SCREEN_PLAY) {
-      screen = SCREEN_PAUSED;
-      announce('Paused.');
-    }
+    if (document.hidden && screen === 'play') screen = 'paused';
   });
-
-  announce('Block Dodger. Press Space or click to start.');
+  announce('SALTWAKE. Press Enter to start.');
   requestAnimationFrame(frame);
 }
 

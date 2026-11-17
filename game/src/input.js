@@ -1,53 +1,67 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
+// Keyboard and mouse. Held keys give movement (WASD or arrows), running and the handbrake (Shift,
+// Space in a car); one-shot presses (E to get in or out, Space or left click to strike, Enter to
+// start, N for a new evening, M to mute, P or Esc to pause) are queued and taken once per frame.
+// The mouse position, turned into a world point by the caller, is where Ivo faces on foot.
 
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
-
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
+const KEYS = {
+  up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
+  run: ['ShiftLeft', 'ShiftRight'], space: ['Space'],
+};
+const PRESSES = { KeyE: 'enter', KeyF: 'enter', Space: 'strike', Enter: 'confirm', KeyN: 'fresh', KeyM: 'mute', KeyP: 'pause', Escape: 'pause' };
 
 export function createInput(target) {
-  let left = false;
-  let right = false;
-  let actions = 0;
+  const held = new Set();
+  let presses = new Set();
+  let mouse = null;
+  let mouseSeen = 0;
 
   window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
+    const press = PRESSES[event.code];
+    const known = press || Object.values(KEYS).some((codes) => codes.includes(event.code));
+    if (!known) return;
     event.preventDefault();
+    held.add(event.code);
+    if (press && !event.repeat) presses.add(press);
   });
-  window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
+  window.addEventListener('keyup', (event) => held.delete(event.code));
+  window.addEventListener('blur', () => held.clear());
+  target.addEventListener('pointermove', (event) => {
+    mouse = { x: event.clientX, y: event.clientY };
+    mouseSeen = performance.now();
   });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
-  window.addEventListener('blur', () => {
-    left = false;
-    right = false;
+  target.addEventListener('pointerdown', (event) => {
+    mouse = { x: event.clientX, y: event.clientY };
+    mouseSeen = performance.now();
+    if (event.button === 0) presses.add('click');
   });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
-  });
+  target.addEventListener('contextmenu', (event) => event.preventDefault());
+
+  const any = (name) => KEYS[name].some((code) => held.has(code));
 
   return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
-    },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
+    /** The held controls this frame; `toWorld` turns the mouse's screen point into a world point. */
+    controls(toWorld) {
+      const taken = presses;
+      presses = new Set();
+      const aim = mouse && performance.now() - mouseSeen < 4000 ? toWorld(mouse.x, mouse.y) : null;
+      return {
+        moveX: (any('right') ? 1 : 0) - (any('left') ? 1 : 0),
+        moveY: (any('down') ? 1 : 0) - (any('up') ? 1 : 0),
+        run: any('run'),
+        brake: any('space'),
+        aim,
+        enter: taken.has('enter'),
+        strike: taken.has('strike') || taken.has('click'),
+        confirm: taken.has('confirm') || taken.has('click'),
+        fresh: taken.has('fresh'),
+        mute: taken.has('mute'),
+        pause: taken.has('pause'),
+      };
     },
   };
+}
+
+/** Controls with nothing pressed, for the title screen and staged shots. */
+export function idleControls() {
+  return { moveX: 0, moveY: 0, run: false, brake: false, aim: null, enter: false, strike: false, confirm: false, fresh: false, mute: false, pause: false };
 }
