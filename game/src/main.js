@@ -1,171 +1,119 @@
-// Boot and the one loop for SALTWAKE (the entry module game/index.html loads). The canvas fills the window; the town advances in fixed
-// 1/60 s steps and is painted once a frame. Screens: the title (the town drifting behind it),
-// play, paused. The save is written whenever the job or the cash changes.
-//
-// ?shot=chase|street|title|pier&seed=N stages that scene instead (no sound, no storage), paints
-// it twice and then sets window.__shotReady for the screenshot.
-import { paintGround } from './city.js';
-import { createAudio } from './audio.js';
-import { createGame, STEP, stepGame } from './game.js';
-import { createHudState, drawHud, paintMinimap } from './hud.js';
-import { createInput, idleControls } from './input.js';
-import { JOBS } from './jobs.js';
-import { createCamera, drawWorld, followCamera, screenToWorld } from './render.js';
-import { clearSave, loadSave, writeSave } from './save.js';
-import { stageShot } from './shots.js';
-import { drawTitle, titleCameraPoint } from './title.js';
+// Boot: a fixed 1280x720 canvas scaled to the window, the title -> play ->
+// pause loop at a fixed 60 Hz step, and the ?shot=NAME staging path used by
+// the screenshot tool, which raises window.__shotReady once a frame is drawn.
 
-const MAX_FRAME = 0.25;
+import { createWorld, stepWorld, snapCamera } from './game.js';
+import { drawWorld } from './render.js';
+import { drawHud } from './hud.js';
+import { drawTitle, titleCamera } from './title.js';
+import { stageShot } from './shots.js';
+import { installInput, wasPressed, consume, endFrame } from './input.js';
+import { loadSave, clearSave } from './save.js';
+import { startAudio, updateAudio, sfx, toggleMute, toggleRadio } from './audio.js';
+
+const W = 1280;
+const H = 720;
+const STEP = 1 / 60;
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = W;
+canvas.height = H;
+
+function fit() {
+  const s = Math.min(window.innerWidth / W, window.innerHeight / H);
+  canvas.style.width = `${Math.floor(W * s)}px`;
+  canvas.style.height = `${Math.floor(H * s)}px`;
+}
+window.addEventListener('resize', fit);
+fit();
 
 const params = new URLSearchParams(window.location.search);
 const shot = params.get('shot');
-const seedParam = Number.parseInt(params.get('seed') ?? '', 10);
-const seed = Number.isInteger(seedParam) ? seedParam : Math.floor(Math.random() * 4294967296);
+const seed = Number(params.get('seed') || 1);
 
-const canvas = document.getElementById('game');
-const status = document.getElementById('status');
-const ctx = canvas.getContext('2d');
-const dusk = document.createElement('canvas');
-const cam = createCamera();
-
-function fitCanvas() {
-  const dpr = shot ? 1 : Math.min(2, window.devicePixelRatio || 1);
-  cam.w = window.innerWidth;
-  cam.h = window.innerHeight;
-  canvas.width = Math.round(cam.w * dpr);
-  canvas.height = Math.round(cam.h * dpr);
-}
-
-function prepareCity(state) {
-  state.city.ground ??= paintGround(state.city);
-  state.city.minimap ??= paintMinimap(state.city);
-}
-
-function placeTitleCamera(time) {
-  const point = titleCameraPoint(time);
-  cam.x = point.x;
-  cam.y = point.y;
-  cam.zoom = point.zoom;
-}
-
-function runShot(name) {
-  fitCanvas();
-  const scene = stageShot(name, seed);
-  prepareCity(scene.state);
-  const hud = createHudState();
-  if (scene.screen === 'title') placeTitleCamera(scene.state.time);
-  else followCamera(cam, scene.state, 0, true);
-  let painted = 0;
-  function paint() {
-    drawWorld(ctx, dusk, cam, scene.state, scene.screen !== 'title');
-    if (scene.screen === 'title') drawTitle(ctx, cam.w, cam.h, scene.save, scene.state.time);
-    else drawHud(ctx, scene.state, cam, hud, 0, false);
-    painted += 1;
-    if (painted < 2) requestAnimationFrame(paint);
+function runShot() {
+  const { world, mode } = stageShot(shot, seed);
+  let frames = 0;
+  const draw = () => {
+    if (mode === 'title') {
+      drawTitle(ctx, world, W, H, 0.2, null);
+    } else {
+      drawWorld(ctx, world, W, H);
+      drawHud(ctx, world, W, H);
+    }
+    frames += 1;
+    if (frames < 2) requestAnimationFrame(draw);
     else window.__shotReady = true;
-  }
-  requestAnimationFrame(paint);
+  };
+  requestAnimationFrame(draw);
 }
 
 function runGame() {
-  fitCanvas();
-  window.addEventListener('resize', fitCanvas);
-  const input = createInput(canvas);
-  const audio = createAudio();
   let save = loadSave();
-  let state = createGame(seed, save);
-  prepareCity(state);
-  let screen = 'title';
-  let hud = createHudState();
-  let accumulator = 0;
+  let world = createWorld({ seed });
+  let mode = 'title';
+  let titleT = 0;
   let last = performance.now();
-  let pending = { enter: false, strike: false };
-  let saved = { job: save?.job ?? 0, cash: save?.cash ?? -1 };
-  window.__game = { get state() { return state; }, get screen() { return screen; } };
+  let acc = 0;
 
-  const unlock = () => audio.unlock();
-  window.addEventListener('keydown', unlock);
-  window.addEventListener('pointerdown', unlock);
+  installInput(window, startAudio);
 
-  function announce(message) {
-    status.textContent = message;
-  }
-
-  function begin(fresh) {
-    if (fresh) {
-      clearSave();
-      save = null;
-    }
-    state = createGame(seed + 1, fresh ? null : save);
-    hud = createHudState();
-    followCamera(cam, state, 0, true);
-    screen = 'play';
-    announce(`Job ${state.job.id}: ${JOBS[state.job.id].title}.`);
-  }
-
-  function keepSave() {
-    if (state.job.id !== saved.job || state.cash !== saved.cash) {
-      writeSave(state.job.id, state.cash);
-      saved = { job: state.job.id, cash: state.cash };
-    }
-  }
-
-  function speak(events) {
-    for (const e of events) {
-      if (e === 'job') announce(`Job ${state.job.id}: ${JOBS[state.job.id].title}. ${JOBS[state.job.id].brief}`);
-      else if (e === 'wanted') announce(`Wanted level ${state.wanted.level}.`);
-      else if (e === 'blown') announce('Blown. The harbor watch is coming.');
-      else if (e === 'down') announce('Knocked out.');
-    }
+  function begin() {
+    world = createWorld({ seed: seed + Math.floor(Math.random() * 1000), job: save ? save.job : 0, cash: save ? save.cash : 120 });
+    snapCamera(world);
+    mode = 'play';
   }
 
   function frame(now) {
-    requestAnimationFrame(frame);
-    const elapsed = Math.min((now - last) / 1000, MAX_FRAME);
+    const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    const controls = screen === 'title' ? input.controls(() => null) : input.controls((sx, sy) => screenToWorld(cam, sx, sy));
-    if (controls.mute) audio.toggleMute();
-    if (screen === 'title') {
-      if (controls.fresh) begin(true);
-      else if (controls.confirm) begin(false);
-    } else if (controls.pause) {
-      screen = screen === 'paused' ? 'play' : 'paused';
-      announce(screen === 'paused' ? 'Paused.' : 'Playing.');
-    }
-    pending.enter ||= controls.enter;
-    pending.strike ||= controls.strike;
-    if (screen === 'paused') {
-      accumulator = 0;
+    if (consume('mute')) toggleMute();
+    if (consume('radio')) toggleRadio();
+    let stepped = false;
+
+    if (mode === 'title') {
+      titleT += dt;
+      world.time += dt;
+      titleCamera(world, titleT);
+      drawTitle(ctx, world, W, H, titleT, save);
+      if (wasPressed('start')) begin();
+      if (wasPressed('pause') && save) {
+        clearSave();
+        save = null;
+      }
     } else {
-      accumulator += elapsed;
-      while (accumulator >= STEP) {
-        const stepControls = screen === 'play' ? { ...controls, ...pending } : idleControls();
-        pending = { enter: false, strike: false };
-        const events = stepGame(state, stepControls, STEP);
-        if (screen === 'play') {
-          audio.play(events);
-          speak(events);
+      if (consume('pause')) mode = mode === 'paused' ? 'play' : 'paused';
+      if (mode === 'play') {
+        acc += dt;
+        while (acc >= STEP) {
+          stepWorld(world, STEP, sfx);
+          acc -= STEP;
+          endFrame();
+          stepped = true;
         }
-        accumulator -= STEP;
+      }
+      const p = world.player;
+      updateAudio(p.car ? p.car.speed : 0, Boolean(p.car), world.wanted.level, dt);
+      drawWorld(ctx, world, W, H);
+      drawHud(ctx, world, W, H);
+      if (mode === 'paused') {
+        ctx.fillStyle = 'rgba(16,12,28,0.6)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.font = '900 80px "Trebuchet MS", Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffd34d';
+        ctx.fillText('PAUSED', W / 2, H / 2);
+        ctx.font = '800 30px "Trebuchet MS", Arial, sans-serif';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('P or ESC to drive on', W / 2, H / 2 + 60);
       }
     }
-    if (screen === 'title') placeTitleCamera(state.time);
-    else {
-      followCamera(cam, state, elapsed, false);
-      keepSave();
-    }
-    audio.update(state, screen === 'play');
-    drawWorld(ctx, dusk, cam, state, screen !== 'title');
-    if (screen === 'title') drawTitle(ctx, cam.w, cam.h, save, state.time);
-    else drawHud(ctx, state, cam, hud, elapsed, screen === 'paused');
+    if (mode !== 'play' || stepped) endFrame();
+    requestAnimationFrame(frame);
   }
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && screen === 'play') screen = 'paused';
-  });
-  announce('SALTWAKE. Press Enter to start.');
   requestAnimationFrame(frame);
 }
 
-if (shot) runShot(shot);
+if (shot) runShot();
 else runGame();

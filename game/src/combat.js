@@ -1,69 +1,67 @@
-// Fists on the street, the only weapon in Saltwake: Ivo's short strike drops whoever is in the arc in front of him (a watch
-// officer for ten seconds, a passer-by for longer, wanted either way), and officers who reach
-// him land blows of their own.
+// Close combat on foot: Ivo's shove-punch against pedestrians, and the damage
+// he takes when a car clips him.
+
 import { knockDown } from './pedestrians.js';
-import { hurtPlayer } from './player.js';
-import { raiseWanted } from './wanted.js';
+import { carRadius } from './cars.js';
 
-export const STRIKE_REACH = 34;
-const STRIKE_ARC = 1.1;
-const STRIKE_COOL = 0.38;
-const OFFICER_REACH = 17;
-const OFFICER_DAMAGE = 9;
+const REACH = 52;
+const ARC = 1.1;
 
-/** Swing at the arc in front of Ivo. Returns the person struck, or null. */
-export function playerStrike(state) {
-  const p = state.player;
-  if (!p.onFoot || p.strikeCool > 0) return null;
-  p.strikeCool = STRIKE_COOL;
-  p.strikeTime = 0.18;
-  state.events.push('swing');
-  let target = null;
-  let bestD = STRIKE_REACH;
-  for (const person of state.peds) {
-    if (person.mode === 'down') continue;
-    const dx = person.x - p.x;
-    const dy = person.y - p.y;
+export function punch(world, events) {
+  const p = world.player;
+  if (p.car || p.punchCool > 0) return false;
+  p.punchCool = 0.35;
+  p.swing = 0.2;
+  let landed = false;
+  for (const ped of world.peds) {
+    if (ped.down > 0) continue;
+    const dx = ped.x - p.x;
+    const dy = ped.y - p.y;
     const d = Math.hypot(dx, dy);
-    if (d > bestD) continue;
-    let diff = Math.atan2(dy, dx) - p.angle;
+    if (d > REACH) continue;
+    let diff = Math.atan2(dy, dx) - p.face;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
-    if (Math.abs(diff) > STRIKE_ARC) continue;
-    target = person;
-    bestD = d;
+    if (Math.abs(diff) > ARC) continue;
+    ped.hp -= 1;
+    if (ped.hp <= 0) {
+      knockDown(ped, p.x, p.y, 260);
+      events.push({ type: 'pedHit', ped, byPlayer: true });
+    } else {
+      ped.fear = 3;
+      ped.x += dx / (d || 1) * 18;
+      ped.y += dy / (d || 1) * 18;
+      events.push({ type: 'punch', ped });
+    }
+    landed = true;
+    break;
   }
-  if (!target) return null;
-  knockDown(target, p.x, p.y, 160, target.kind === 'officer' ? 10 : 12);
-  state.effects.push({ kind: 'impact', x: target.x, y: target.y, life: 0.5, max: 0.5 });
-  state.events.push('strike');
-  if (target.kind === 'officer') {
-    state.stats.officersDropped += 1;
-    raiseWanted(state, 1, 'officer');
-  } else {
-    raiseWanted(state, 1, 'assault');
-    const wallet = 5 + Math.floor(state.rng() * 20);
-    state.cash += wallet;
-    state.effects.push({ kind: 'cash', x: target.x, y: target.y - 10, life: 1.2, max: 1.2, text: `+$${wallet}` });
-  }
-  return target;
+  return landed;
 }
 
-/** Officers in reach hit Ivo. Returns true when he goes down. */
-export function officerAttacks(state, dt) {
-  const p = state.player;
-  if (!p.onFoot) return false;
-  for (const o of state.peds) {
-    if (o.kind !== 'officer' || o.mode !== 'chase') continue;
-    o.attackCool = Math.max(0, o.attackCool - dt);
-    if (o.attackCool > 0) continue;
-    if (Math.hypot(o.x - p.x, o.y - p.y) > OFFICER_REACH) continue;
-    o.attackCool = 1.1;
-    state.effects.push({ kind: 'impact', x: p.x, y: p.y, life: 0.3, max: 0.3, small: true });
-    if (hurtPlayer(state, OFFICER_DAMAGE)) {
-      state.downCause = 'watch';
-      return true;
+export function footHazards(world, dt, events) {
+  const p = world.player;
+  if (p.car) return;
+  p.hurtCool = Math.max(0, (p.hurtCool || 0) - dt);
+  for (const car of world.cars) {
+    if (Math.abs(car.speed) < 80 || p.hurtCool > 0) continue;
+    const d = Math.hypot(car.x - p.x, car.y - p.y);
+    if (d < carRadius(car) + 12) {
+      const dmg = Math.min(60, Math.abs(car.speed) / 6);
+      p.health -= dmg;
+      p.hurtCool = 0.8;
+      const ux = (p.x - car.x) / (d || 1);
+      const uy = (p.y - car.y) / (d || 1);
+      p.x += ux * 40;
+      p.y += uy * 40;
+      car.speed *= 0.6;
+      events.push({ type: 'hurt', amount: dmg });
     }
   }
-  return false;
+}
+
+export function tickCombat(world, dt) {
+  const p = world.player;
+  p.punchCool = Math.max(0, (p.punchCool || 0) - dt);
+  p.swing = Math.max(0, (p.swing || 0) - dt);
 }

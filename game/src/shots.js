@@ -1,107 +1,112 @@
-// The staged screenshots behind ?shot=chase|street|title|pier (with &seed=N), listed in shots.json. Each starts a real
-// evening and runs the real systems forward, with an autopilot at the controls where Ivo has to
-// act, until the moment the shot is about: a watch cruiser on the bumper, Ivo beside a car he
-// can steal in the Market, the start screen, a strike dropping an officer on the north pier.
-import { LINES, PIER } from './city.js';
-import { carSpeed, createCar } from './cars.js';
-import { createGame, STEP, stepGame } from './game.js';
-import { idleControls } from './input.js';
-import { enterCar } from './player.js';
-import { clearAhead, laneCorners, steerToward } from './traffic.js';
-import { titleCameraPoint } from './title.js';
+// Staged scenes for the screenshot tool, picked by ?shot=NAME: a chase on the
+// Quay road, a Market street on foot, the title, and the run up the pier.
 
-const RING = { a: LINES[0], b: LINES[4] };
+import { createWorld, snapCamera } from './game.js';
+import { makeCar } from './cars.js';
+import { makePed } from './pedestrians.js';
+import { setLevel } from './wanted.js';
+import { T, tileAt, WALK } from './city.js';
+import { titleCamera } from './title.js';
 
-function driveRing(state, corners, pilot) {
-  const car = state.player.car;
-  let target = corners[pilot.next];
-  if (Math.hypot(target.x - car.x, target.y - car.y) < 40) {
-    pilot.next = (pilot.next + 1) % 4;
-    target = corners[pilot.next];
+function crowd(world, cx, cy, count, radius) {
+  let placed = 0;
+  for (let i = 0; i < 400 && placed < count; i++) {
+    const x = cx + (world.rng() - 0.5) * radius * 2;
+    const y = cy + (world.rng() - 0.5) * radius * 2;
+    if (tileAt(world.city, x, y) !== WALK) continue;
+    const p = makePed(x, y, world.rng);
+    p.face = world.rng() * Math.PI * 2;
+    p.step = world.rng() * 6;
+    world.peds.push(p);
+    placed++;
   }
-  const { steer } = steerToward(car, target.x, target.y);
-  const gap = clearAhead(state, car, 120);
-  const controls = idleControls();
-  controls.moveX = steer;
-  controls.moveY = gap < 70 ? 1 : carSpeed(car) < 235 ? -1 : 0;
-  return controls;
 }
 
-function stageChase(seed) {
-  const state = createGame(seed, { job: 3, cash: 1840 });
-  const corners = laneCorners(RING, -1);
-  const car = createCar('sedan', corners[1].x, 1760, -Math.PI / 2, '#c8553d');
-  state.cars = state.cars.filter((c) => Math.hypot(c.x - car.x, c.y - car.y) > 80);
-  state.cars.push(car);
-  enterCar(state, car);
-  const pilot = { next: 2 };
-  for (let i = 0; i < 60 / STEP; i += 1) {
-    stepGame(state, driveRing(state, corners, pilot), STEP);
-    if (state.time < 5) continue;
-    const fx = Math.cos(car.angle);
-    const fy = Math.sin(car.angle);
-    const behind = state.cars.some((c) => {
-      if (c.kind !== 'watch') return false;
-      const dx = c.x - car.x;
-      const dy = c.y - car.y;
-      const d = Math.hypot(dx, dy);
-      return d > 70 && d < 190 && (dx * fx + dy * fy) < -0.7 * d;
-    });
-    if (behind && carSpeed(car) > 150) break;
-  }
-  return { state, screen: 'play' };
+function cruiser(world, x, y, angle, speed) {
+  const c = makeCar('watch', x, y, angle);
+  c.driver = 'watch';
+  c.siren = 1;
+  c.speed = speed;
+  c.chase = { node: world.nodes[0], stuck: 0, reverse: 0 };
+  world.cars.push(c);
+  return c;
 }
 
-function stageStreet(seed) {
-  const state = createGame(seed, { job: 2, cash: 640 });
-  const p = state.player;
-  p.x = 1553;
-  p.y = 1258;
-  const controls = idleControls();
-  controls.aim = { x: 1531, y: 1290 };
-  for (let i = 0; i < 6 / STEP; i += 1) stepGame(state, controls, STEP);
-  return { state, screen: 'play' };
+function civilian(world, x, y, angle, kind, color) {
+  const c = makeCar(kind, x, y, angle, color);
+  c.speed = 120;
+  world.cars.push(c);
+  return c;
 }
 
-function stageTitle(seed) {
-  const state = createGame(seed, { job: 2, cash: 370 });
-  for (let i = 0; i < 4 / STEP; i += 1) stepGame(state, idleControls(), STEP);
-  return { state, screen: 'title', save: { job: 2, cash: 370 }, cam: titleCameraPoint(state.time) };
+function boardVan(world, x, y, angle, speed) {
+  const van = world.jobVan;
+  van.x = x;
+  van.y = y;
+  van.angle = angle;
+  van.speed = speed;
+  van.driver = 'player';
+  world.player.car = van;
+  world.player.x = x;
+  world.player.y = y;
 }
 
-function stagePier(seed) {
-  const state = createGame(seed, { job: 3, cash: 1840 });
-  const p = state.player;
-  p.x = PIER.endX;
-  p.y = -170;
-  p.angle = Math.PI / 2;
-  let after = -1;
-  for (let i = 0; i < 60 / STEP; i += 1) {
-    const controls = idleControls();
-    let nearest = null;
-    let nd = Infinity;
-    for (const o of state.peds) {
-      if (o.kind !== 'officer' || o.mode === 'down') continue;
-      const d = Math.hypot(o.x - p.x, o.y - p.y);
-      if (d < nd) {
-        nd = d;
-        nearest = o;
-      }
-    }
-    if (nearest && nd < 90) controls.aim = { x: nearest.x, y: nearest.y };
-    else controls.aim = { x: p.x, y: p.y + 10 };
-    if (nearest && nd < 26 && after < 0) controls.strike = true;
-    stepGame(state, controls, STEP);
-    if (after < 0 && state.stats.officersDropped > 0) after = 7;
-    if (after > 0 && --after === 0) break;
-  }
-  return { state, screen: 'play' };
-}
-
-/** Build the named scene. Returns the state, which screen to draw, and any staged save or camera. */
 export function stageShot(name, seed) {
-  if (name === 'street') return stageStreet(seed);
-  if (name === 'title') return stageTitle(seed);
-  if (name === 'pier') return stagePier(seed);
-  return stageChase(seed);
+  if (name === 'title') {
+    const world = createWorld({ seed });
+    world.time = 3.2;
+    titleCamera(world, 40);
+    return { world, mode: 'title' };
+  }
+  if (name === 'street') {
+    const world = createWorld({ seed, job: 1, cash: 420 });
+    world.player.x = 47.5 * T;
+    world.player.y = 26 * T + 30;
+    world.player.face = -0.4;
+    world.player.speed = 125;
+    world.player.step = 2;
+    const px = world.player.x;
+    const py = world.player.y;
+    world.cars = world.cars.filter((c) => Math.hypot(c.x - px, c.y - py) > 260);
+    crowd(world, px, py, 14, 520);
+    civilian(world, 46 * T, 27.5 * T, Math.PI, 'sedan', '#d94f3d');
+    civilian(world, 36 * T, 28.5 * T, 0, 'hatch', '#f2c14e');
+    civilian(world, 40.5 * T, 31 * T, -Math.PI / 2, 'van', '#57b86b');
+    world.time = 12.4;
+    snapCamera(world);
+    world.camera.zoom = 1.1;
+    world.feed.push({ text: 'THE LEDGER DROP IS RIGHT THERE — FIND WHEELS', color: '#ffd34d', time: 3 });
+    return { world, mode: 'play' };
+  }
+  if (name === 'pier') {
+    const world = createWorld({ seed, job: 2, cash: 1420 });
+    world.jobs.ledger = true;
+    boardVan(world, 41 * T, 6.2 * T, -Math.PI / 2, 260);
+    setLevel(world.wanted, 2);
+    cruiser(world, 40.6 * T, 11.2 * T, -Math.PI / 2 - 0.15, 300);
+    cruiser(world, 37 * T, 9.5 * T, -0.1, 280);
+    crowd(world, 41 * T, 7 * T, 6, 300);
+    world.time = 21.7;
+    snapCamera(world);
+    world.camera.y += 60;
+    world.camera.zoom = 0.92;
+    return { world, mode: 'play' };
+  }
+  const world = createWorld({ seed, job: 2, cash: 1420 });
+  world.jobs.ledger = true;
+  boardVan(world, 34 * T, 19.5 * T, -0.08, 340);
+  setLevel(world.wanted, 3);
+  world.wanted.flash = 0;
+  cruiser(world, 31.2 * T, 19.6 * T, 0.02, 360);
+  cruiser(world, 29.5 * T, 18.4 * T, 0.1, 330);
+  cruiser(world, 41.5 * T, 21.5 * T, -Math.PI / 2, 300);
+  civilian(world, 38 * T, 18.5 * T, Math.PI, 'sedan', '#8a5fc2');
+  civilian(world, 27 * T, 19.5 * T, 0, 'hatch', '#ef8a3c');
+  crowd(world, 34 * T, 19 * T, 10, 560);
+  world.time = 8.3;
+  snapCamera(world);
+  world.camera.x += 120;
+  world.camera.zoom = 0.9;
+  world.feed.push({ text: 'YOU RAMMED A WATCH CRUISER', color: '#ff8a5c', time: 3 });
+  return { world, mode: 'play' };
 }

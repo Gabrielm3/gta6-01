@@ -1,28 +1,34 @@
-// The save (one small JSON entry, no position): which job Ivo is on and the cash in his pocket, kept in localStorage so the evening
-// picks up where it was left. Storage can be off (a private window); the game then just forgets.
+// Progress kept in localStorage: which job Ivo is on and his cash. Storage can
+// be unavailable (private mode, file:// in some browsers); that is reported to
+// the console and the game runs without a save.
 
-const KEY = 'saltwake.save.v1';
+const KEY = 'saltwake.save.v2';
 
-/** The stored progress, or null when there is none (or it cannot be read). */
 export function loadSave() {
+  let raw;
   try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return null;
+    raw = window.localStorage.getItem(KEY);
+  } catch (err) {
+    console.warn('saltwake: save unavailable', err);
+    return null;
+  }
+  if (!raw) return null;
+  try {
     const data = JSON.parse(raw);
-    const job = Number(data.job);
-    const cash = Number(data.cash);
-    if (!Number.isInteger(job) || job < 1 || job > 4 || !Number.isFinite(cash)) return null;
-    return { job, cash: Math.max(0, Math.floor(cash)) };
-  } catch {
+    if (typeof data.job !== 'number' || typeof data.cash !== 'number') throw new Error('bad save shape');
+    return { job: Math.max(0, Math.min(3, data.job)), cash: Math.max(0, data.cash) };
+  } catch (err) {
+    console.warn('saltwake: discarding unreadable save', err);
     return null;
   }
 }
 
 export function writeSave(job, cash) {
   try {
-    window.localStorage.setItem(KEY, JSON.stringify({ job, cash: Math.floor(cash), at: Date.now() }));
+    window.localStorage.setItem(KEY, JSON.stringify({ job, cash: Math.round(cash) }));
     return true;
-  } catch {
+  } catch (err) {
+    console.warn('saltwake: could not save', err);
     return false;
   }
 }
@@ -30,7 +36,7 @@ export function writeSave(job, cash) {
 export function clearSave() {
   try {
     window.localStorage.removeItem(KEY);
-  } catch {
-    // Nothing stored to clear.
+  } catch (err) {
+    console.warn('saltwake: could not clear save', err);
   }
 }

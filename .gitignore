@@ -1,2 +1,6 @@
 out/
+output/
 node_modules/
+dossier.json
+.DS_Store
+*.log

@@ -1,77 +1,126 @@
-// The evening's three jobs for Ivo Pell, in order (each pays cash on success): take the Yard's van, lift the ledger at the
-// Market drop without stopping, then carry it to the end of the north pier with the harbor
-// watch on him. Job 4 is the free evening after. Each job knows its banner, its target and how
-// it is done or blown.
-import { carSpeed } from './cars.js';
-import { MARKET_DROP, PIER } from './city.js';
-import { raiseWanted } from './wanted.js';
+// The three jobs of the night: take the van in the Yard, lift the ledger at
+// the Market without stopping, and run it to the north pier.
+
+import { addHeat } from './wanted.js';
+
+const LIFT_SPEED = 140;
+const STALL_SPEED = 35;
+const STALL_LIMIT = 0.6;
 
 export const JOBS = [
-  null,
-  { title: 'STEAL THE YARD VAN', brief: 'The orange van is parked in the Yard, north-west. Walk up and press E.', pay: 250 },
-  { title: 'LIFT THE LEDGER — DON’T STOP', brief: 'Drive through the Market drop at speed. Stop in it and the job is blown.', pay: 400 },
-  { title: 'DELIVER IT TO THE NORTH PIER', brief: 'The harbor watch is on you. Get the ledger to the end of the pier.', pay: 1500 },
-  { title: 'THE EVENING IS YOURS', brief: 'Ledger delivered. Saltwake is yours to roam.', pay: 0 },
+  {
+    title: 'TAKE THE VAN',
+    hint: 'The blue van in the Yard. Walk up and press E.',
+    reward: 300,
+  },
+  {
+    title: 'LIFT THE LEDGER',
+    hint: 'Roll through the Market drop at speed. Do not stop.',
+    reward: 700,
+  },
+  {
+    title: 'DELIVER TO THE NORTH PIER',
+    hint: 'Get the ledger to the end of the north pier.',
+    reward: 4000,
+  },
 ];
 
-const GRAB_SPEED = 90;
-const STOP_SPEED = 30;
-const PIER_REACH = 46;
-
-/** Set up job `id` (used both when a job follows the last and when a save is loaded). */
-export function startJob(state, id) {
-  state.job = { id, cool: 0, flash: 2.5 };
-  state.wanted.floor = id === 3 ? 2 : 0;
-  if (id === 3) raiseWanted(state, Math.max(0, 3 - state.wanted.level), 'ledger');
-  state.events.push('job');
+export function makeJobs(index = 0) {
+  return { index, stall: 0, warn: 0, armed: true, ledger: index === 2, done: index >= JOBS.length, toast: null };
 }
 
-/** Where the active job wants Ivo to go, or null. */
-export function jobTarget(state) {
-  const id = state.job.id;
-  if (id === 1) return { x: state.yardVan.x, y: state.yardVan.y, label: 'YARD VAN' };
-  if (id === 2) return { x: MARKET_DROP.x, y: MARKET_DROP.y, label: 'LEDGER DROP' };
-  if (id === 3) return { x: PIER.endX, y: PIER.endY, label: 'NORTH PIER' };
+export function currentJob(jobs) {
+  return JOBS[jobs.index] || null;
+}
+
+export function jobMarker(world) {
+  const { jobs, city, jobVan } = world;
+  if (jobs.index === 0) return jobVan ? { x: jobVan.x, y: jobVan.y, r: 70 } : null;
+  if (jobs.index === 1) return { x: city.market.x, y: city.market.y, r: 90 };
+  if (jobs.index === 2) return { x: city.pierEnd.x, y: city.pierEnd.y, r: 95 };
   return null;
 }
 
-export function say(state, text, seconds, tone) {
-  state.message = { text, life: seconds, max: seconds, tone };
+function toast(jobs, text, color, time = 3) {
+  jobs.toast = { text, color, time };
 }
 
-function finish(state, text) {
-  const job = JOBS[state.job.id];
-  state.cash += job.pay;
-  say(state, `${text}  +$${job.pay}`, 3.2, 'good');
-  state.events.push('done');
-  startJob(state, state.job.id + 1);
+function complete(world, events) {
+  const { jobs } = world;
+  const job = JOBS[jobs.index];
+  world.cash += job.reward;
+  events.push({ type: 'jobDone', index: jobs.index, reward: job.reward });
+  toast(jobs, `${job.title}  +$${job.reward}`, '#7dff8a');
+  jobs.index += 1;
+  jobs.stall = 0;
+  jobs.armed = true;
+  if (jobs.index >= JOBS.length) {
+    jobs.done = true;
+    toast(jobs, 'THE LEDGER IS IN. SALTWAKE IS YOURS.', '#ffd34d', 6);
+  }
 }
 
-/** Check the active job against where Ivo is and what he is doing. */
-export function updateJobs(state, dt) {
-  const job = state.job;
-  const p = state.player;
-  job.flash = Math.max(0, job.flash - dt);
-  job.cool = Math.max(0, job.cool - dt);
-  if (job.id === 1) {
-    if (p.car === state.yardVan) finish(state, 'YARD VAN TAKEN');
-  } else if (job.id === 2) {
-    if (job.cool > 0) return;
-    const d = Math.hypot(p.x - MARKET_DROP.x, p.y - MARKET_DROP.y);
-    if (d > MARKET_DROP.r) return;
-    const speed = p.car ? carSpeed(p.car) : 0;
-    if (speed >= GRAB_SPEED) {
-      finish(state, 'LEDGER LIFTED');
-    } else if (speed < STOP_SPEED) {
-      job.cool = 6;
-      raiseWanted(state, 2, 'blown');
-      say(state, 'BLOWN — YOU STOPPED IN THE DROP', 3, 'bad');
-      state.events.push('blown');
+export function updateJobs(world, dt, events) {
+  const { jobs, player } = world;
+  if (jobs.toast) {
+    jobs.toast.time -= dt;
+    if (jobs.toast.time <= 0) jobs.toast = null;
+  }
+  jobs.warn = Math.max(0, jobs.warn - dt);
+  const m = jobMarker(world);
+  if (!m) return;
+  const body = player.car || player;
+  const d = Math.hypot(body.x - m.x, body.y - m.y);
+  const speed = player.car ? Math.abs(player.car.speed) : 0;
+
+  if (jobs.index === 0) {
+    if (player.car && player.car === world.jobVan) complete(world, events);
+    return;
+  }
+
+  if (jobs.index === 1) {
+    if (d > m.r) {
+      jobs.stall = 0;
+      jobs.armed = true;
+      return;
     }
-  } else if (job.id === 3) {
-    if (Math.hypot(p.x - PIER.endX, p.y - PIER.endY) < PIER_REACH) {
-      finish(state, 'LEDGER DELIVERED');
-      state.wanted.floor = 0;
+    if (!player.car) {
+      if (jobs.armed) toast(jobs, 'YOU NEED WHEELS FOR THIS', '#ff6b6b', 2);
+      jobs.armed = false;
+      return;
     }
+    if (!jobs.armed) return;
+    if (speed >= LIFT_SPEED) {
+      jobs.ledger = true;
+      addHeat(world.wanted, 200);
+      events.push({ type: 'ledger' });
+      complete(world, events);
+      return;
+    }
+    jobs.warn = 0.4;
+    if (speed < STALL_SPEED) jobs.stall += dt;
+    if (jobs.stall > STALL_LIMIT) {
+      jobs.armed = false;
+      jobs.stall = 0;
+      addHeat(world.wanted, 100);
+      toast(jobs, 'YOU STOPPED. LOOP BACK AND HIT IT FAST', '#ff6b6b', 3.5);
+      events.push({ type: 'jobFail' });
+    }
+    return;
+  }
+
+  if (jobs.index === 2 && d < m.r && speed < 120) {
+    jobs.ledger = false;
+    complete(world, events);
+  }
+}
+
+export function loseLedger(world) {
+  const { jobs } = world;
+  if (jobs.index === 2) {
+    jobs.index = 1;
+    jobs.ledger = false;
+    jobs.armed = true;
+    toast(jobs, 'THE LEDGER IS GONE. LIFT IT AGAIN', '#ff6b6b', 4);
   }
 }

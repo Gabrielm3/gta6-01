@@ -1,119 +1,163 @@
-// One evening in Saltwake (deterministic for a given seed): the state of the whole town and the fixed-step update that runs every
-// system in order (Ivo, traffic, the watch, car physics, people, fists, wanted, jobs) and
-// collects this step's events for the sound and the screen reader.
-import { buildCity, SAFEHOUSE } from './city.js';
-import { carSpeed, collideCars, stepCar } from './cars.js';
-import { officerAttacks, playerStrike } from './combat.js';
-import { startJob, say, updateJobs } from './jobs.js';
-import { runOverPeople, spawnPedestrians, updatePedestrians } from './pedestrians.js';
-import { createPlayer, exitCar, hurtPlayer, updatePlayer } from './player.js';
-import { createRandom } from './random.js';
+// The world of one night in Saltwake and the fixed-step update that ties the
+// systems together: player, traffic, pedestrians, the watch, heat and jobs.
+
+import { buildCity, nodeList, makeRng, T } from './city.js';
+import { makeCar, collideCars } from './cars.js';
 import { spawnTraffic, updateTraffic } from './traffic.js';
-import { createWanted, raiseWanted, updateWanted } from './wanted.js';
-import { updateWatch } from './watch.js';
+import { spawnPeds, updatePeds, respawnFarPeds } from './pedestrians.js';
+import { makePlayer, updatePlayer, enterOrExit, playerWantsEnter } from './player.js';
+import { makeWanted, addHeat, updateWanted, clearWanted } from './wanted.js';
+import { updateWatch, clearWatch } from './watch.js';
+import { punch, footHazards, tickCombat } from './combat.js';
+import { makeJobs, updateJobs, loseLedger } from './jobs.js';
+import { wasPressed } from './input.js';
+import { writeSave } from './save.js';
 
-export const STEP = 1 / 60;
-export const START_CASH = 120;
+const TRAFFIC = 28;
+const PEDS = 80;
 
-let sharedCity = null;
-
-/** A fresh evening from `seed`, resuming at `progress.job` with `progress.cash` when given. */
-export function createGame(seed, progress) {
-  sharedCity ??= buildCity();
-  const state = {
-    rng: createRandom(seed), time: 0, city: sharedCity, cars: [], peds: [], effects: [], skids: [], events: [],
-    player: createPlayer(), wanted: createWanted(), job: { id: 1, cool: 0, flash: 0 }, cash: progress?.cash ?? START_CASH,
-    message: null, alarm: 0, down: 0, downCause: '', stats: { officersDropped: 0, peopleHit: 0 }, yardVan: null,
+export function createWorld(opts = {}) {
+  const seed = opts.seed ?? 1;
+  const rng = makeRng(seed * 977 + 13);
+  const city = buildCity(7);
+  const nodes = nodeList();
+  const world = {
+    rng, city, nodes, cars: [], peds: [],
+    player: makePlayer(city.spawn.x, city.spawn.y),
+    wanted: makeWanted(),
+    jobs: makeJobs(opts.job ?? 0),
+    cash: opts.cash ?? 120,
+    time: 0,
+    camera: { x: city.spawn.x, y: city.spawn.y, zoom: 1 },
+    feed: [],
+    banner: null,
+    bustTimer: 0,
+    spawnTimer: 0,
   };
-  spawnTraffic(state);
-  spawnPedestrians(state);
-  startJob(state, progress?.job ?? 1);
-  if (state.job.id === 3) say(state, 'YOU STILL HAVE THE LEDGER — THE WATCH IS OUT', 3, 'bad');
-  state.events.length = 0;
-  return state;
+  world.jobVan = makeCar('van', city.yardVan.x, city.yardVan.y, 0, '#2f6fd8');
+  world.cars.push(world.jobVan);
+  for (const [col, row, ang] of [[23.5, 29.4, 0], [26.5, 29.4, 0], [44.5, 26.6, Math.PI]]) {
+    world.cars.push(makeCar('sedan', col * T, row * T, ang));
+  }
+  spawnTraffic(world, TRAFFIC, rng);
+  spawnPeds(world, PEDS, rng);
+  return world;
 }
 
-function knockOut(state) {
-  state.down = 3.2;
-  state.events.push('down');
-  if (state.player.car) exitCar(state);
+function say(world, text, color = '#ffffff') {
+  world.feed.unshift({ text, color, time: 3.5 });
+  if (world.feed.length > 4) world.feed.length = 4;
 }
 
-/** Ivo wakes at the Quay safehouse: lighter of pocket, heat off, and the ledger gone if he had it. */
-function respawn(state) {
-  const p = state.player;
-  p.x = SAFEHOUSE.x;
-  p.y = SAFEHOUSE.y;
-  p.health = 100;
-  state.cash = Math.max(0, state.cash - Math.min(80, Math.floor(state.cash * 0.1)));
-  state.cars = state.cars.filter((c) => c.kind !== 'watch');
-  state.peds = state.peds.filter((o) => o.kind !== 'officer');
-  state.wanted.level = 0;
-  const lostLedger = state.job.id === 3;
-  startJob(state, lostLedger ? 2 : state.job.id);
-  state.wanted.level = 0;
-  say(state, lostLedger ? 'THE WATCH TOOK THE LEDGER — LIFT IT AGAIN' : 'BACK AT THE QUAY', 3, 'bad');
+function respawn(world, reason) {
+  const { city, player } = world;
+  const lost = Math.floor(world.cash * 0.15);
+  world.cash -= lost;
+  if (player.car) player.car.driver = null;
+  player.car = null;
+  player.x = city.spawn.x;
+  player.y = city.spawn.y;
+  player.health = 100;
+  clearWanted(world.wanted);
+  clearWatch(world);
+  loseLedger(world);
+  world.banner = { text: reason, sub: lost > 0 ? `-$${lost}` : 'BACK IN THE YARD', time: 3 };
+  writeSave(world.jobs.index, world.cash);
 }
 
-/** Advance the evening one fixed step under `controls`. Returns this step's events. */
-export function stepGame(state, controls, dt) {
-  state.events.length = 0;
-  state.time += dt;
-  if (state.down > 0) {
-    state.down -= dt;
-    if (state.down <= 0) respawn(state);
-    return state.events;
-  }
-  const p = state.player;
-  updatePlayer(state, controls, dt);
-  if (controls.strike && p.onFoot) playerStrike(state);
-  updateTraffic(state, dt);
-  updateWatch(state, dt);
-  for (const car of state.cars) {
-    if (car.parked && !car.vx && !car.vy) continue;
-    const impact = stepCar(car, state.city, dt, state.skids);
-    if (car.driver === 'player' && impact > 120) {
-      state.events.push('crash');
-      car.damage = Math.min(1, car.damage + impact / 1500);
-      if (impact > 200 && hurtPlayer(state, Math.floor(impact / 40))) state.downCause = 'crash';
-    }
-  }
-  for (const hit of collideCars(state.cars)) {
-    const mine = hit.a.driver === 'player' || hit.b.driver === 'player';
-    if (mine) state.events.push('crash');
-  }
-  if (p.car) {
-    p.x = p.car.x;
-    p.y = p.car.y;
-  }
-  for (const person of runOverPeople(state)) {
-    state.stats.peopleHit += 1;
-    state.events.push('hit');
-    raiseWanted(state, 1, person.kind === 'officer' ? 'officer' : 'hit');
-  }
-  // Watch cars that run Ivo down on foot hurt him.
-  if (p.onFoot && p.hurtCool <= 0) {
-    for (const car of state.cars) {
-      if (car.driver === 'player' || carSpeed(car) < 90) continue;
-      if (Math.hypot(car.x - p.x, car.y - p.y) < car.spec.len * 0.5) {
-        p.hurtCool = 1;
-        if (hurtPlayer(state, 20)) state.downCause = 'crash';
+function cameraFollow(world, dt) {
+  const { player, camera } = world;
+  const body = player.car || player;
+  const sp = player.car ? player.car.speed : 0;
+  const lead = player.car ? 0.55 : 0;
+  const tx = body.x + Math.cos(body.angle ?? player.face) * sp * lead;
+  const ty = body.y + Math.sin(body.angle ?? player.face) * sp * lead;
+  const k = Math.min(1, dt * 4);
+  camera.x += (tx - camera.x) * k;
+  camera.y += (ty - camera.y) * k;
+  const wantZoom = player.car ? 1 - Math.min(0.22, Math.abs(sp) / 1600) : 1.15;
+  camera.zoom += (wantZoom - camera.zoom) * Math.min(1, dt * 1.5);
+}
+
+export function stepWorld(world, dt, sound) {
+  const { rng, player, wanted } = world;
+  const events = [];
+  world.time += dt;
+
+  if (playerWantsEnter()) enterOrExit(world, rng, events);
+  if (wasPressed('punch')) punch(world, events);
+  tickCombat(world, dt);
+
+  updatePlayer(world, dt);
+  updateTraffic(world, dt, rng);
+  const watch = updateWatch(world, dt, rng);
+
+  for (const hit of collideCars(world.cars)) {
+    const mine = hit.a === player.car || hit.b === player.car;
+    const other = hit.a === player.car ? hit.b : hit.a;
+    if (mine) {
+      events.push({ type: 'crash' });
+      if (other.kind === 'watch' && other.driver === 'watch') addHeat(wanted, 30);
+      else if (other.ai) {
+        other.ai.panic = 3;
+        if (hit.force > 220) addHeat(wanted, 12);
       }
     }
   }
-  updatePedestrians(state, dt);
-  if (officerAttacks(state, dt)) state.downCause = 'watch';
-  updateWanted(state, dt);
-  updateJobs(state, dt);
-  if (p.health <= 0) knockOut(state);
-  else if (state.wanted.level === 0 && p.health < 100) p.health = Math.min(100, p.health + dt * 2);
-  for (const e of state.effects) e.life -= dt;
-  state.effects = state.effects.filter((e) => e.life > 0);
-  for (const s of state.skids) s.life -= dt;
-  while (state.skids.length && state.skids[0].life <= 0) state.skids.shift();
-  if (state.message) {
-    state.message.life -= dt;
-    if (state.message.life <= 0) state.message = null;
+  footHazards(world, dt, events);
+  updatePeds(world, dt, rng, events);
+  respawnFarPeds(world, rng);
+
+  for (const e of events) {
+    if (e.type === 'pedHit' && e.byPlayer) {
+      addHeat(wanted, 55);
+      say(world, 'A WITNESS CALLED THE WATCH', '#ff8a5c');
+    } else if (e.type === 'punch') {
+      addHeat(wanted, 15);
+    } else if (e.type === 'crime') {
+      say(world, `YOU ${e.what.toUpperCase()}`, '#ff8a5c');
+    }
   }
-  return state.events;
+
+  updateWanted(wanted, dt, watch.seen);
+  updateJobs(world, dt, events);
+
+  for (const e of events) {
+    if (sound) {
+      if (e.type === 'crash') sound('crash');
+      else if (e.type === 'pedHit') sound('hit');
+      else if (e.type === 'punch') sound('punch');
+      else if (e.type === 'door') sound('door');
+      else if (e.type === 'jobDone') sound('cash');
+      else if (e.type === 'jobFail') sound('warn');
+    }
+    if (e.type === 'jobDone') writeSave(world.jobs.index, world.cash);
+  }
+  if (world.jobs.warn > 0 && sound && Math.floor(world.time * 6) % 3 === 0) sound('warn');
+
+  if (watch.busted) {
+    if (sound) sound('bust');
+    respawn(world, 'BUSTED BY THE HARBOR WATCH');
+  } else if (player.health <= 0) {
+    if (sound) sound('bust');
+    respawn(world, 'LAID OUT ON THE STREET');
+  }
+
+  const civilians = world.cars.filter((c) => c.ai).length;
+  if (civilians < TRAFFIC - 6) spawnTraffic(world, 1, rng);
+
+  for (const f of world.feed) f.time -= dt;
+  world.feed = world.feed.filter((f) => f.time > 0);
+  if (world.banner) {
+    world.banner.time -= dt;
+    if (world.banner.time <= 0) world.banner = null;
+  }
+  cameraFollow(world, dt);
+  return events;
+}
+
+export function snapCamera(world) {
+  const body = world.player.car || world.player;
+  world.camera.x = body.x;
+  world.camera.y = body.y;
 }

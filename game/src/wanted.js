@@ -1,47 +1,55 @@
-// The wanted level: five pips of harbor-watch attention, drawn top right by hud.js. It rises when Ivo hits someone, pulls a
-// driver out, strikes an officer or blows a job, and falls one pip at a time once no watch car
-// or officer has had eyes on him for a while. The delivery job holds it at two or more.
+// Harbor-watch heat: crimes add heat, heat maps to zero to five pips, and the
+// pips cool off once the watch has lost sight of the player for long enough.
 
-export const MAX_WANTED = 5;
-const LOSE_SECONDS = 9;
-const SIGHT = 520;
+export const MAX_PIPS = 5;
+const HEAT_PER_PIP = 100;
+const COOL_DELAY = 6;
 
-export function createWanted() {
-  return { level: 0, calm: 0, flash: 0, floor: 0, reason: '' };
+export function makeWanted() {
+  return { heat: 0, level: 0, unseen: 0, flash: 0 };
 }
 
-export function raiseWanted(state, amount, reason) {
-  const w = state.wanted;
+export function addHeat(w, amount) {
   const before = w.level;
-  w.level = Math.min(MAX_WANTED, w.level + amount);
-  w.calm = 0;
-  w.reason = reason;
-  if (w.level > before) {
-    w.flash = 1.4;
-    state.events.push('wanted');
-  }
-  state.alarm = 2;
+  w.heat = Math.min(MAX_PIPS * HEAT_PER_PIP, w.heat + amount);
+  w.level = Math.min(MAX_PIPS, Math.ceil(w.heat / HEAT_PER_PIP - 0.001));
+  w.unseen = 0;
+  if (w.level > before) w.flash = 1.5;
+  return w.level > before;
 }
 
-/** Whether any watch car or officer is close enough to keep the heat on. */
-export function watchHasEyes(state) {
-  const p = state.player;
-  for (const car of state.cars) if (car.kind === 'watch' && (car.x - p.x) ** 2 + (car.y - p.y) ** 2 < SIGHT * SIGHT) return true;
-  for (const person of state.peds) if (person.kind === 'officer' && person.mode !== 'down' && (person.x - p.x) ** 2 + (person.y - p.y) ** 2 < 300 * 300) return true;
-  return false;
+export function setLevel(w, level) {
+  w.heat = level * HEAT_PER_PIP;
+  w.level = level;
+  w.unseen = 0;
 }
 
-export function updateWanted(state, dt) {
-  const w = state.wanted;
+export function clearWanted(w) {
+  w.heat = 0;
+  w.level = 0;
+  w.unseen = 0;
+}
+
+export function updateWanted(w, dt, seen) {
   w.flash = Math.max(0, w.flash - dt);
-  state.alarm = Math.max(0, (state.alarm ?? 0) - dt);
-  if (w.level < w.floor) w.level = w.floor;
   if (w.level === 0) return;
-  if (watchHasEyes(state)) w.calm = 0;
-  else w.calm += dt;
-  if (w.calm >= LOSE_SECONDS && w.level > w.floor) {
-    w.level -= 1;
-    w.calm = 0;
-    state.events.push('calm');
+  if (seen) {
+    w.unseen = 0;
+    return;
   }
+  w.unseen += dt;
+  if (w.unseen > COOL_DELAY) {
+    const floor = (w.level - 1) * HEAT_PER_PIP;
+    w.heat = Math.max(floor, w.heat - dt * 40);
+    if (w.heat <= floor + 0.5) {
+      w.level -= 1;
+      w.heat = w.level * HEAT_PER_PIP;
+      w.unseen = COOL_DELAY * 0.5;
+    }
+  }
+}
+
+export function coolingProgress(w) {
+  if (w.level === 0) return 0;
+  return Math.min(1, w.unseen / COOL_DELAY);
 }
