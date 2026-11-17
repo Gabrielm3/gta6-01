@@ -77,29 +77,30 @@ export function stageShot(name, seed) {
     world.player.step = 2;
     const px = world.player.x;
     const py = world.player.y;
-    world.cars = world.cars.filter((c) => Math.hypot(c.x - px, c.y - py) > 260);
-    crowd(world, px, py, 14, 520);
-    civilian(world, 46 * T, 27.5 * T, Math.PI, 'sedan', '#d94f3d');
-    civilian(world, 36 * T, 28.5 * T, 0, 'hatch', '#f2c14e');
-    civilian(world, 40.5 * T, 31 * T, -Math.PI / 2, 'van', '#57b86b');
+    world.cars = world.cars.filter((c) => Math.hypot(c.x - px, c.y - py) > 480);
+    crowd(world, px, py + 40, 18, 340);
+    civilian(world, 2944, 1760, Math.PI, 'sedan', '#d94f3d');
+    civilian(world, 3190, 1822, 0, 'hatch', '#f2c14e');
+    civilian(world, 3300, 1830, Math.PI / 2, 'van', '#57b86b');
     world.time = 12.4;
     snapCamera(world);
-    world.camera.zoom = 1.1;
+    world.camera.y = 1740;
+    world.camera.zoom = 1.6;
     world.feed.push({ text: 'THE LEDGER DROP IS RIGHT THERE — FIND WHEELS', color: '#ffd34d', time: 3 });
     return { world, mode: 'play' };
   }
   if (name === 'pier') {
     const world = createWorld({ seed, job: 2, cash: 1420 });
     world.jobs.ledger = true;
-    boardVan(world, 41 * T, 6.2 * T, -Math.PI / 2, 260);
+    boardVan(world, 41 * T, 7 * T, -Math.PI / 2, 260);
     setLevel(world.wanted, 2);
-    cruiser(world, 40.6 * T, 11.2 * T, -Math.PI / 2 - 0.15, 300);
-    cruiser(world, 37 * T, 9.5 * T, -0.1, 280);
-    crowd(world, 41 * T, 7 * T, 6, 300);
+    cruiser(world, 40.6 * T, 9.4 * T, -Math.PI / 2 - 0.15, 300);
+    cruiser(world, 39 * T, 9.5 * T, -0.1, 280);
+    crowd(world, 41 * T, 8.5 * T, 8, 260);
     world.time = 21.7;
     snapCamera(world);
-    world.camera.y += 60;
-    world.camera.zoom = 0.92;
+    world.camera.y = 478;
+    world.camera.zoom = 1.55;
     return { world, mode: 'play' };
   }
   const world = createWorld({ seed, job: 2, cash: 1420 });

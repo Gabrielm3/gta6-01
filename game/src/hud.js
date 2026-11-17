@@ -154,8 +154,10 @@ function drawTargetArrow(ctx, world, W, H) {
   const sy = (m.y - cam.y) * cam.zoom + H / 2;
   if (sx > 60 && sx < W - 60 && sy > 60 && sy < H - 60) return;
   const a = Math.atan2(sy - H / 2, sx - W / 2);
+  // Keep the arrow inside a box that clears the top HUD panels (job card on
+  // the left, wanted/cash/radio on the right end near y=186) and the bottom ones.
   const rx = W / 2 - 90;
-  const ry = H / 2 - 90;
+  const ry = Math.sin(a) < 0 ? H / 2 - 190 : H / 2 - 140;
   const k = Math.min(rx / Math.abs(Math.cos(a) || 0.001), ry / Math.abs(Math.sin(a) || 0.001));
   ctx.save();
   ctx.translate(W / 2 + Math.cos(a) * k, H / 2 + Math.sin(a) * k);
@@ -173,8 +175,10 @@ function drawTargetArrow(ctx, world, W, H) {
   ctx.stroke();
   ctx.restore();
   const dist = Math.hypot(m.x - (world.player.car || world.player).x, m.y - (world.player.car || world.player).y);
-  const tx = W / 2 + Math.cos(a) * (k - 62);
-  const ty = H / 2 + Math.sin(a) * (k - 62);
+  // Label sits beside the arrow (perpendicular to its heading) so it never
+  // drifts inward onto the player's vehicle or outward into the HUD panels.
+  const tx = W / 2 + Math.cos(a) * k - Math.sin(a) * 62;
+  const ty = H / 2 + Math.sin(a) * k + Math.cos(a) * 62 + 9;
   text(ctx, `${Math.round(dist / T * 4)}m`, tx, ty, 26, '#ffd34d', 'center');
 }
 
