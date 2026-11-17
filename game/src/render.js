@@ -9,6 +9,7 @@ import { drawCar } from './cars.js';
 import { drawPed } from './pedestrians.js';
 import { drawPlayer } from './player.js';
 import { jobMarker } from './jobs.js';
+import { render3d } from './view3d.js';
 
 const LOT_COLORS = new Map([
   [DISTRICTS.YARD, '#d8cdb4'],
@@ -259,7 +260,17 @@ function drawSun(ctx, W, H) {
   ctx.restore();
 }
 
+// Renders the 3D view onto the world3d canvas and leaves the 2D canvas clear
+// for the HUD. Falls back to the top-down view when WebGL is unavailable.
 export function drawWorld(ctx, world, W, H) {
+  if (render3d(world, W, H)) {
+    ctx.clearRect(0, 0, W, H);
+    return;
+  }
+  drawWorld2d(ctx, world, W, H);
+}
+
+function drawWorld2d(ctx, world, W, H) {
   const cam = world.camera;
   const z = cam.zoom;
   const halfW = W / 2 / z;

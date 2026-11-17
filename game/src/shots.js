@@ -112,10 +112,10 @@ export function stageShot(name, seed) {
   boardVan(world, 2176, 19.5 * T, -0.03, 340);
   setLevel(world.wanted, 3);
   world.wanted.flash = 0;
-  cruiser(world, 2066, 19.55 * T, 0.04, 360);
-  cruiser(world, 1935, 18.75 * T, 0.18, 330);
-  cruiser(world, 1760, 19.5 * T, 0, 320);
-  civilian(world, 2330, 18.5 * T, Math.PI, 'sedan', '#8a5fc2');
+  cruiser(world, 2245, 18.55 * T, 0.05, 360);
+  cruiser(world, 2010, 19.5 * T, 0.02, 330);
+  cruiser(world, 1860, 18.7 * T, 0.12, 320);
+  civilian(world, 2470, 18.5 * T, Math.PI, 'sedan', '#8a5fc2');
   civilian(world, 2440, 19.5 * T, 0, 'hatch', '#ef8a3c');
   civilian(world, 1952, 20.9 * T, -Math.PI / 2, 'van', '#57b86b');
   walkers(world, [
