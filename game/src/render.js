@@ -118,8 +118,24 @@ function drawBuilding(ctx, b) {
   const y = b.r0 * T + 4;
   const w = (b.c1 - b.c0 + 1) * T - 8;
   const h = (b.r1 - b.r0 + 1) * T - 8;
+  const d = 16;
   ctx.fillStyle = SHADOW;
-  ctx.fillRect(x + 10, y + 12, w, h);
+  ctx.fillRect(x + d + 8, y + d + 10, w, h);
+  const right = [[x + w, y], [x + w + d, y + d], [x + w + d, y + h + d], [x + w, y + h]];
+  const bottom = [[x, y + h], [x + w, y + h], [x + w + d, y + h + d], [x + d, y + h + d]];
+  for (const [face, shade] of [[right, 'rgba(0,0,0,0.42)'], [bottom, 'rgba(0,0,0,0.26)']]) {
+    ctx.beginPath();
+    ctx.moveTo(face[0][0], face[0][1]);
+    for (let i = 1; i < face.length; i++) ctx.lineTo(face[i][0], face[i][1]);
+    ctx.closePath();
+    ctx.fillStyle = b.roof;
+    ctx.fill();
+    ctx.fillStyle = shade;
+    ctx.fill();
+    ctx.strokeStyle = '#1a1620';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
   ctx.fillStyle = b.roof;
   ctx.strokeStyle = '#1a1620';
   ctx.lineWidth = 5;
