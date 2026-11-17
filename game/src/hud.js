@@ -299,10 +299,27 @@ export function drawHud(ctx, state, cam, hud, dt, paused) {
   ctx.setTransform(ctx.canvas.width / w, 0, 0, ctx.canvas.height / h, 0, 0);
   ctx.textBaseline = 'alphabetic';
   drawArrow(ctx, state, cam, w, h);
-  drawBanner(ctx, state);
-  drawWanted(ctx, state, w);
+  const scaled = (ax, ay, k, draw) => {
+    ctx.save();
+    ctx.translate(ax, ay);
+    ctx.scale(k, k);
+    ctx.translate(-ax, -ay);
+    draw();
+    ctx.restore();
+  };
+  scaled(22, 20, 1.25, () => drawBanner(ctx, state));
+  scaled(w - 22, 20, 1.3, () => drawWanted(ctx, state, w));
   drawMinimap(ctx, state, 28, h - MAP_SIZE - 28);
-  drawStatus(ctx, state, w, h);
+  scaled(w - 22, h - 22, 1.25, () => drawStatus(ctx, state, w, h));
+  ctx.font = font(900, 20);
+  ctx.letterSpacing = '3px';
+  const radio = '♪ HARBOR FM';
+  const rw = ctx.measureText(radio).width + 32;
+  panel(ctx, w - 22 - rw, 136, rw, 38, 8, 'rgba(12,16,22,0.88)');
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ff8fd0';
+  ctx.fillText(radio, w - 22 - 14, 162);
+  ctx.letterSpacing = '0px';
   drawDistrict(ctx, state, w, h, hud);
   drawMessage(ctx, state, w);
   if (state.down > 0) {

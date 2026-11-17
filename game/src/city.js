@@ -1,4 +1,4 @@
-// The island of Saltwake: one fixed map. A ring road and a grid of streets cut the land into
+// The island of Saltwake: one fixed map, the same on every run. A ring road and a grid of streets cut the land into
 // sixteen blocks; the four quarters are the Yard (north-west), the Ridge (north-east), the Quay
 // (south-west) and the Market (south-east). The north pier runs out into the harbor from the
 // middle of the north shore. This file lays the map out, answers collision questions about it,

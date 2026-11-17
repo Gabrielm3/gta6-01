@@ -236,7 +236,7 @@ function drawDusk(ctx, dusk, cam, state, v) {
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.globalCompositeOperation = 'source-over';
   g.clearRect(0, 0, dusk.width, dusk.height);
-  g.fillStyle = 'rgba(10,16,40,0.6)';
+  g.fillStyle = 'rgba(24,34,70,0.32)';
   g.fillRect(0, 0, dusk.width, dusk.height);
   g.setTransform(cam.zoom * scale, 0, 0, cam.zoom * scale, (cam.w / 2 - cam.x * cam.zoom) * scale, (cam.h / 2 - cam.y * cam.zoom) * scale);
   g.globalCompositeOperation = 'destination-out';

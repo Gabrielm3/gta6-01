@@ -6,7 +6,7 @@
 // in: it copies game/ and screenshots/ (1-chase.jpg is the cover) to /output and writes
 // /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
 //
-// Play it locally with `node serve.ts`, then open http://localhost:8080.
+// Play it locally with `node serve.ts` (or `node serve.ts --port N`), then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 

@@ -1,4 +1,4 @@
-// Boot and the one loop for SALTWAKE. The canvas fills the window; the town advances in fixed
+// Boot and the one loop for SALTWAKE (the entry module game/index.html loads). The canvas fills the window; the town advances in fixed
 // 1/60 s steps and is painted once a frame. Screens: the title (the town drifting behind it),
 // play, paused. The save is written whenever the job or the cash changes.
 //

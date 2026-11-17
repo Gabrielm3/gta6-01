@@ -1,4 +1,4 @@
-// One evening in Saltwake: the state of the whole town and the fixed-step update that runs every
+// One evening in Saltwake (deterministic for a given seed): the state of the whole town and the fixed-step update that runs every
 // system in order (Ivo, traffic, the watch, car physics, people, fists, wanted, jobs) and
 // collects this step's events for the sound and the screen reader.
 import { buildCity, SAFEHOUSE } from './city.js';

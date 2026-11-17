@@ -1,4 +1,4 @@
-// Cars: the kinds on Saltwake's streets, their arcade driving model (throttle, steering, grip and a
+// Cars (all pure Canvas 2D, no sprites): the kinds on Saltwake's streets, their arcade driving model (throttle, steering, grip and a
 // handbrake slide), pushing them out of walls and off each other, and painting them from above.
 import { resolveCircle } from './city.js';
 

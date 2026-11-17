@@ -1,4 +1,4 @@
-// Keyboard and mouse. Held keys give movement (WASD or arrows), running and the handbrake (Shift,
+// Keyboard and mouse (no gamepad). Held keys give movement (WASD or arrows), running and the handbrake (Shift,
 // Space in a car); one-shot presses (E to get in or out, Space or left click to strike, Enter to
 // start, N for a new evening, M to mute, P or Esc to pause) are queued and taken once per frame.
 // The mouse position, turned into a world point by the caller, is where Ivo faces on foot.

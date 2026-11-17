@@ -1,4 +1,4 @@
-// People on foot: Saltwake's walkers loop the sidewalk round their block, scatter from a fast car
+// People on foot (the officers use drawPerson too): Saltwake's walkers loop the sidewalk round their block, scatter from a fast car
 // or a fight, and lie where a car or a strike drops them. drawPerson paints anyone on foot,
 // Ivo and the harbor watch's officers included.
 import { resolveCircle, SIDEWALK } from './city.js';

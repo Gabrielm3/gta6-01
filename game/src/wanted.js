@@ -1,4 +1,4 @@
-// The wanted level: five pips of harbor-watch attention. It rises when Ivo hits someone, pulls a
+// The wanted level: five pips of harbor-watch attention, drawn top right by hud.js. It rises when Ivo hits someone, pulls a
 // driver out, strikes an officer or blows a job, and falls one pip at a time once no watch car
 // or officer has had eyes on him for a while. The delivery job holds it at two or more.
 

@@ -1,4 +1,4 @@
-// Ivo Pell, the courier: walking (and running) through town, getting into any car that is not
+// Ivo Pell, the courier and the only character the player controls: walking (and running) through town, getting into any car that is not
 // the watch's (parked ones quietly, moving ones by pulling the driver out), driving it, and
 // getting back out on the curb.
 import { resolveCircle, SAFEHOUSE } from './city.js';

@@ -1,4 +1,4 @@
-// The harbor watch, Saltwake's police: white-and-slate cruisers with amber-and-cyan bars. While
+// The harbor watch, Saltwake's police (how hard they push follows wanted.js): white-and-slate cruisers with amber-and-cyan bars. While
 // Ivo is wanted they spawn out of sight at a street corner, run the street grid toward him,
 // close in directly once near, and put officers on foot when he is out of his car. They drive
 // away when the heat is off.

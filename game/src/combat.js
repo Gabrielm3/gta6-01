@@ -1,4 +1,4 @@
-// Fists on the street: Ivo's short strike drops whoever is in the arc in front of him (a watch
+// Fists on the street, the only weapon in Saltwake: Ivo's short strike drops whoever is in the arc in front of him (a watch
 // officer for ten seconds, a passer-by for longer, wanted either way), and officers who reach
 // him land blows of their own.
 import { knockDown } from './pedestrians.js';

@@ -1,4 +1,4 @@
-// Through traffic: cars that drive the ring road (and an inner loop round the middle of town) in
+// Through traffic (never the watch's cruisers, which watch.js drives): cars that drive the ring road (and an inner loop round the middle of town) in
 // their own lane, both ways, braking for whatever is in front of them; plus the cars parked along
 // the curbs that anyone can steal, the Yard's van among them.
 import { LANE, LINES, MARKET_CAR_SPOT, PARK, ROAD_HALF, YARD_VAN_SPOT } from './city.js';

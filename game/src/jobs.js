@@ -1,4 +1,4 @@
-// The evening's three jobs for Ivo Pell, in order: take the Yard's van, lift the ledger at the
+// The evening's three jobs for Ivo Pell, in order (each pays cash on success): take the Yard's van, lift the ledger at the
 // Market drop without stopping, then carry it to the end of the north pier with the harbor
 // watch on him. Job 4 is the free evening after. Each job knows its banner, its target and how
 // it is done or blown.

@@ -1,4 +1,4 @@
-// The start screen: SALTWAKE over a slow drift across the evening town, the three jobs of the
+// The start screen, the first thing a player sees: SALTWAKE over a slow drift across the evening town, the three jobs of the
 // night, the controls, and what the save holds (Enter carries on from it, N starts over).
 import { JOBS } from './jobs.js';
 

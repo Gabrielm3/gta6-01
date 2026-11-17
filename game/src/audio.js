@@ -1,4 +1,4 @@
-// Every sound in Saltwake, made live with the Web Audio API: an engine note that follows the
+// Every sound in Saltwake, made live with the Web Audio API (no audio files are loaded): an engine note that follows the
 // car's speed, the watch's two-tone wail while a cruiser is near, short synthesized hits for
 // strikes, crashes and job beats, and an original slow harbor loop (a bass walk and plucked
 // minor-key notes) under it all. Nothing is loaded; the context starts on the first key or click.

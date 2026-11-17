@@ -1,4 +1,4 @@
-// The staged screenshots behind ?shot=chase|street|title|pier (with &seed=N). Each starts a real
+// The staged screenshots behind ?shot=chase|street|title|pier (with &seed=N), listed in shots.json. Each starts a real
 // evening and runs the real systems forward, with an autopilot at the controls where Ivo has to
 // act, until the moment the shot is about: a watch cruiser on the bumper, Ivo beside a car he
 // can steal in the Market, the start screen, a strike dropping an officer on the north pier.

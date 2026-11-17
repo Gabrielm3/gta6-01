@@ -1,4 +1,4 @@
-// The save: which job Ivo is on and the cash in his pocket, kept in localStorage so the evening
+// The save (one small JSON entry, no position): which job Ivo is on and the cash in his pocket, kept in localStorage so the evening
 // picks up where it was left. Storage can be off (a private window); the game then just forgets.
 
 const KEY = 'saltwake.save.v1';
