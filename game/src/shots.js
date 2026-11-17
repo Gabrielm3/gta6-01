@@ -22,6 +22,16 @@ function crowd(world, cx, cy, count, radius) {
   }
 }
 
+function walkers(world, spots) {
+  for (const [x, y] of spots) {
+    if (tileAt(world.city, x, y) !== WALK) continue;
+    const p = makePed(x, y, world.rng);
+    p.face = world.rng() * Math.PI * 2;
+    p.step = world.rng() * 6;
+    world.peds.push(p);
+  }
+}
+
 function cruiser(world, x, y, angle, speed) {
   const c = makeCar('watch', x, y, angle);
   c.driver = 'watch';
@@ -94,19 +104,27 @@ export function stageShot(name, seed) {
   }
   const world = createWorld({ seed, job: 2, cash: 1420 });
   world.jobs.ledger = true;
-  boardVan(world, 34 * T, 19.5 * T, -0.08, 340);
+  const camX = 2093;
+  const camY = 19 * T;
+  world.cars = world.cars.filter((c) => Math.abs(c.x - camX) > 700 || Math.abs(c.y - camY) > 450);
+  world.peds = world.peds.filter((p) => Math.abs(p.x - camX) > 700 || Math.abs(p.y - camY) > 450);
+  boardVan(world, 2176, 19.5 * T, -0.03, 340);
   setLevel(world.wanted, 3);
   world.wanted.flash = 0;
-  cruiser(world, 31.2 * T, 19.6 * T, 0.02, 360);
-  cruiser(world, 29.5 * T, 18.4 * T, 0.1, 330);
-  cruiser(world, 41.5 * T, 21.5 * T, -Math.PI / 2, 300);
-  civilian(world, 38 * T, 18.5 * T, Math.PI, 'sedan', '#8a5fc2');
-  civilian(world, 27 * T, 19.5 * T, 0, 'hatch', '#ef8a3c');
-  crowd(world, 34 * T, 19 * T, 10, 560);
+  cruiser(world, 2066, 19.55 * T, 0.04, 360);
+  cruiser(world, 1935, 18.75 * T, 0.18, 330);
+  cruiser(world, 1760, 19.5 * T, 0, 320);
+  civilian(world, 2330, 18.5 * T, Math.PI, 'sedan', '#8a5fc2');
+  civilian(world, 2440, 19.5 * T, 0, 'hatch', '#ef8a3c');
+  civilian(world, 1952, 20.9 * T, -Math.PI / 2, 'van', '#57b86b');
+  walkers(world, [
+    [2010, 17.5 * T], [2090, 17.3 * T], [2170, 17.6 * T], [2250, 17.4 * T], [2330, 17.5 * T],
+    [2020, 20.4 * T], [2110, 20.6 * T], [2200, 20.3 * T], [2280, 20.5 * T], [2370, 20.4 * T],
+  ]);
   world.time = 8.3;
-  snapCamera(world);
-  world.camera.x += 120;
-  world.camera.zoom = 0.9;
+  world.camera.x = camX;
+  world.camera.y = camY;
+  world.camera.zoom = 1.45;
   world.feed.push({ text: 'YOU RAMMED A WATCH CRUISER', color: '#ff8a5c', time: 3 });
   return { world, mode: 'play' };
 }
