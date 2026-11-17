@@ -41,8 +41,8 @@ function bakeMinimap(city) {
   for (let r = 0; r < ROWS; r++) {
     for (let col = 0; col < COLS; col++) {
       const t = city.tiles[r * COLS + col];
-      g.fillStyle = t === WATER ? '#24577a' : t === SAND ? '#d8bf86' : t === ROAD ? '#f2efe6'
-        : t === PIER ? '#c08a4c' : t === WALK ? '#9c968c' : t === BUILDING ? '#5d5866' : '#7c8a6c';
+      g.fillStyle = t === WATER ? '#14a6d6' : t === SAND ? '#ffe3a1' : t === ROAD ? '#ffffff'
+        : t === PIER ? '#cf9452' : t === WALK ? '#eee8db' : t === BUILDING ? '#8a8496' : '#62c94c';
       g.fillRect(col * 4, r * 4, 4, 4);
     }
   }
@@ -83,7 +83,7 @@ function drawMinimap(ctx, world, x, y, w, h) {
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, 10);
   ctx.clip();
-  ctx.fillStyle = '#24577a';
+  ctx.fillStyle = '#14a6d6';
   ctx.fillRect(x, y, w, h);
   const cx = x + w / 2;
   const cy = y + h / 2;
@@ -188,7 +188,7 @@ export function drawHud(ctx, world, W, H) {
     text(ctx, job.title, 160, 50, 34, '#ffffff');
     text(ctx, job.hint, 42, 104, 21, '#d8d4e8', 'left', 700);
   } else {
-    text(ctx, 'FREE ROAM — SALTWAKE AT DUSK', 42, 56, 28, '#ffd34d');
+    text(ctx, 'FREE ROAM — SALTWAKE AT MIDDAY', 42, 56, 28, '#ffd34d');
   }
   if (jobs.ledger) {
     panel(ctx, 20, 146, 200, 48);

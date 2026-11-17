@@ -28,9 +28,9 @@ export function drawTitle(ctx, world, W, H, t, save) {
   drawWorld(ctx, world, W, H);
 
   const g = ctx.createLinearGradient(0, 0, W, 0);
-  g.addColorStop(0, 'rgba(18,12,34,0.82)');
-  g.addColorStop(0.62, 'rgba(18,12,34,0.55)');
-  g.addColorStop(1, 'rgba(18,12,34,0.05)');
+  g.addColorStop(0, 'rgba(10,40,70,0.6)');
+  g.addColorStop(0.62, 'rgba(10,40,70,0.3)');
+  g.addColorStop(1, 'rgba(10,40,70,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 
@@ -52,8 +52,8 @@ export function drawTitle(ctx, world, W, H, t, save) {
   ctx.fillText('SALTWAKE', 0, 0);
   ctx.restore();
 
-  line(ctx, 'ONE COURIER. ONE LEDGER. ONE NIGHT ON THE ISLAND.', 86, 280, 30, '#ffffff', 800, 'left');
-  line(ctx, 'You are Ivo Pell. The harbor watch is already awake.', 86, 330, 26, '#d8d4e8', 700, 'left');
+  line(ctx, 'ONE COURIER. ONE LEDGER. ONE DAY ON THE ISLAND.', 86, 280, 30, '#ffffff', 800, 'left');
+  line(ctx, 'You are Ivo Pell. The harbor watch is already awake.', 86, 330, 26, '#ffffff', 700, 'left');
 
   const rows = [
     ['W A S D / ARROWS', 'drive or walk'],
